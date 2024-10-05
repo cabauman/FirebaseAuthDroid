@@ -1,9 +1,11 @@
 ﻿using System;
 using Android.App;
+using Android.Gms.Tasks;
 using Android.OS;
 using Android.Runtime;
 using Android.Support.Design.Widget;
 using Android.Support.V7.App;
+using Android.Util;
 using Android.Views;
 using Android.Widget;
 using Firebase;
@@ -14,6 +16,7 @@ namespace FirebaseAuthDroid
     [Activity(Label = "@string/app_name", Theme = "@style/AppTheme.NoActionBar", MainLauncher = true)]
     public class MainActivity : AppCompatActivity
     {
+        // Update: Works in 70.1602.0-preview1 but not 60.*
         // Bug: Attempting to link a phone number that's already linked to another account doesn't throw an exception.
         //      It just hangs indefinitely.
         // Expected behavior: Throw a FirebaseAuthUserCollisionException
@@ -37,14 +40,11 @@ namespace FirebaseAuthDroid
             Android.Support.V7.Widget.Toolbar toolbar = FindViewById<Android.Support.V7.Widget.Toolbar>(Resource.Id.toolbar);
             SetSupportActionBar(toolbar);
 
-            FloatingActionButton fab = FindViewById<FloatingActionButton>(Resource.Id.fab);
-            fab.Click += FabOnClick;
-
             // ======================== REPLACE THE VALUES BELOW ==================================
             FirebaseOptions options = new FirebaseOptions
                 .Builder()
-                .SetApiKey("<API_KEY>")
-                .SetApplicationId("<APPLICATION_ID>")
+                .SetApiKey("AIzaSyCpgkUs5ymPgZ9Q7pV51F4o4BjAeGKbxVo")
+                .SetApplicationId("1:447724422483:android:87fcb66cc6ca320a")
                 .Build();
             // ====================================================================================
 
@@ -91,44 +91,22 @@ namespace FirebaseAuthDroid
                 60,
                 Java.Util.Concurrent.TimeUnit.Seconds,
                 this,
-                new PhoneAuthCallbacks(_tvStatus, _btnSigninAnonymous, _btnLinkPhone));
-        }
-
-        public override bool OnCreateOptionsMenu(IMenu menu)
-        {
-            MenuInflater.Inflate(Resource.Menu.menu_main, menu);
-            return true;
-        }
-
-        public override bool OnOptionsItemSelected(IMenuItem item)
-        {
-            int id = item.ItemId;
-            if (id == Resource.Id.action_settings)
-            {
-                return true;
-            }
-
-            return base.OnOptionsItemSelected(item);
-        }
-
-        private void FabOnClick(object sender, EventArgs eventArgs)
-        {
-            View view = (View) sender;
-            Snackbar.Make(view, "Replace with your own action", Snackbar.LengthLong)
-                .SetAction("Action", (Android.Views.View.IOnClickListener)null).Show();
+                new PhoneAuthCallbacks(this, _tvStatus, _btnSigninAnonymous, _btnLinkPhone));
         }
     }
 
 
 
-    public class PhoneAuthCallbacks : PhoneAuthProvider.OnVerificationStateChangedCallbacks
+    public class PhoneAuthCallbacks : PhoneAuthProvider.OnVerificationStateChangedCallbacks, IOnCompleteListener
     {
+        private Activity _activity;
         private TextView _tvStatus;
         private Button _btnSigninAnonymous;
         private Button _btnLinkPhone;
 
-        public PhoneAuthCallbacks(TextView tvStatus, Button btnSigninAnonymous, Button btnLinkPhone)
+        public PhoneAuthCallbacks(Activity activity, TextView tvStatus, Button btnSigninAnonymous, Button btnLinkPhone)
         {
+            _activity = activity;
             _tvStatus = tvStatus;
             _btnSigninAnonymous = btnSigninAnonymous;
             _btnLinkPhone = btnLinkPhone;
@@ -141,6 +119,9 @@ namespace FirebaseAuthDroid
             IAuthResult result = null;
             try
             {
+                //FirebaseAuth.Instance.CurrentUser
+                //    .LinkWithCredential(credential)
+                //    .AddOnCompleteListener(_activity, this);
                 result = await FirebaseAuth.Instance.CurrentUser.LinkWithCredentialAsync(credential);
             }
             catch (FirebaseAuthException ex)
@@ -150,7 +131,7 @@ namespace FirebaseAuthDroid
                 return;
             }
 
-            _tvStatus.Text = "Account link successful.";
+            _tvStatus.Text = "Account link successful. " + result.User.Uid;
             _btnLinkPhone.Visibility = ViewStates.Gone;
             _btnSigninAnonymous.Visibility = ViewStates.Visible;
             _btnSigninAnonymous.Enabled = true;
@@ -164,6 +145,15 @@ namespace FirebaseAuthDroid
         public override void OnVerificationFailed(FirebaseException exception)
         {
             _tvStatus.Text = exception.Message;
+        }
+
+        public void OnComplete(Task task)
+        {
+            if (!task.IsSuccessful)
+            {
+                _tvStatus.Text = task.Exception.Message;
+                Toast.MakeText(_activity, "Authentication failed.", ToastLength.Long).Show();
+            }
         }
     }
 }
